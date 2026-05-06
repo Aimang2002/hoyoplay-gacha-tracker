@@ -1,25 +1,28 @@
 # ZZZ Gacha Stats / 绝区零抽卡统计
 
-绝区零（Zenless Zone Zero）抽卡记录统计与可视化桌面工具，基于 Electron + React 构建。
+绝区零（Zenless Zone Zero）抽卡记录统计与可视化桌面工具，基于 Electron + React 构建，数据完全本地存储。
 
 ## 功能特性
 
-- 多卡池统计：独家频段、音擎频段、常驻频段、邦布频段独立统计
-- 环形图可视化：各卡池 S/A/B 级出率一目了然
-- 时间线记录：按时间轴展示 S/A 级获取记录，标注抽数间隔
-- 保底计数：实时显示当前保底进度，渐变色直观提示
-- 多账号管理：支持多 UID 切换浏览
-- 增量同步：仅拉取新增记录，避免重复请求
-- 一键导出：将时间线导出为 1080x1920 分享图片
-- 图标自动获取：从米哈游 Wiki API 拉取物品图标
+- **多卡池统计**：独家频段、音擎频段、常驻频段、邦布频段独立统计
+- **环形图可视化**：各卡池 S/A/B 级出率一目了然
+- **时间线记录**：按时间轴展示 S/A 级获取记录，标注抽数间隔
+- **保底计数**：实时显示当前保底进度，渐变色直观提示
+- **多账号管理**：支持多 UID 切换浏览
+- **增量同步**：仅拉取新增记录，避免重复请求
+- **一键导出**：将时间线导出为 1080x1920 分享图片
+- **图标自动获取**：从米哈游 Wiki API 拉取物品图标
 
 ## 技术栈
 
-- Electron - 桌面应用框架
-- React 18 - 前端 UI
-- Vite 5 - 构建工具
-- ECharts 5 - 数据可视化
-- sql.js - 本地 SQLite 数据库（WASM，无需原生编译）
+| 技术 | 用途 |
+|------|------|
+| Electron 33 | 桌面应用框架 |
+| React 18 | 前端 UI |
+| Vite 5 | 构建工具 |
+| ECharts 5 | 数据可视化 |
+| sql.js | 本地 SQLite 数据库（WASM，无需原生编译） |
+| html2canvas | 图片导出 |
 
 ## 环境要求
 
@@ -31,14 +34,17 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/Aimang/zzz-gacha-stats.git
-cd zzz-gacha-stats
+git clone https://github.com/Aimang2002/hoyoplay-gacha-tracker.git
+cd hoyoplay-gacha-tracker
 
 # 安装依赖
 npm install
 
 # 启动开发环境
 npm run dev
+
+# 构建 Windows 版本
+npm run build:win
 ```
 
 ## 使用方法
@@ -57,22 +63,26 @@ npm run dev
 ```
 zzz-gacha-stats/
   electron/
-    main.js      # Electron 主进程
-    preload.js   # 预加载脚本（IPC 桥接）
-    db.js        # 数据库操作
-    api.js       # 米哈游 API 请求
-    parser.js    # Player.log 解析
+    main.js       # Electron 主进程、IPC 处理
+    preload.js    # 上下文桥接
+    db.js         # 数据库操作（sql.js）
+    api.js        # 米哈游 API 请求
+    parser.js     # Player.log 解析
   src/
-    App.jsx      # 主应用组件
-    App.css      # 全局样式
-    main.jsx     # React 入口
+    main.jsx      # React 入口
+    App.jsx       # 主应用组件
+    App.css       # 全局样式
+    utils.js      # 共享工具函数
     components/
-      GachaPieChart.jsx  # 环形图组件
-      STimeline.jsx      # 时间线组件
-      ShareExport.jsx    # 导出分享组件
+      GachaPieChart.jsx  # 环形图
+      STimeline.jsx      # 时间线
+      ShareExport.jsx    # 分享导出
       TitleBar.jsx       # 自定义标题栏
-  data/          # 运行时数据（已忽略）
-  启动.bat       # 一键启动脚本
+  build/
+    icon.png / icon.ico  # 应用图标
+  data/                  # 运行时数据（已忽略 .gitignore）
+  scripts/
+    png2ico.js           # 图标转换脚本
 ```
 
 ## 开源协议
