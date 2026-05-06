@@ -58,33 +58,6 @@ npm run build:win
 
 所有数据保存在本地 `data/gacha.db`（SQLite），首次运行时自动创建，不会上传至任何服务器。
 
-## 项目结构
-
-```
-zzz-gacha-stats/
-  electron/
-    main.js       # Electron 主进程、IPC 处理
-    preload.js    # 上下文桥接
-    db.js         # 数据库操作（sql.js）
-    api.js        # 米哈游 API 请求
-    parser.js     # Player.log 解析
-  src/
-    main.jsx      # React 入口
-    App.jsx       # 主应用组件
-    App.css       # 全局样式
-    utils.js      # 共享工具函数
-    components/
-      GachaPieChart.jsx  # 环形图
-      STimeline.jsx      # 时间线
-      ShareExport.jsx    # 分享导出
-      TitleBar.jsx       # 自定义标题栏
-  build/
-    icon.png / icon.ico  # 应用图标
-  data/                  # 运行时数据（已忽略 .gitignore）
-  scripts/
-    png2ico.js           # 图标转换脚本
-```
-
 ## 开源协议
 
 [MIT License](LICENSE)
