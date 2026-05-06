@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.cache/
+data/
+*.log
+
+package-lock.json
+*.db
+*.db-journal
+out/
+release/
+计划书.md
+启动.bat

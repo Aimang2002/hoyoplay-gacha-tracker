@@ -1,0 +1,52 @@
+{
+    "name": "zzz-gacha-stats",
+    "version": "1.0.0",
+    "description": "绝区零抽卡统计工具",
+    "license": "MIT",
+    "main": "electron/main.js",
+    "scripts": {
+        "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development ELECTRON_CACHE=.cache electron .\"",
+        "build": "vite build",
+        "build:win": "vite build && electron-builder --win",
+        "start": "cross-env ELECTRON_CACHE=.cache electron ."
+    },
+    "dependencies": {
+        "echarts": "^5.5.1",
+        "echarts-for-react": "^3.0.2",
+        "html2canvas": "^1.4.1",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "sql.js": "^1.11.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.3.4",
+        "concurrently": "^9.1.0",
+        "cross-env": "^7.0.3",
+        "electron": "^33.2.0",
+        "electron-builder": "^25.1.8",
+        "vite": "^5.4.11",
+        "wait-on": "^8.0.1"
+    },
+    "build": {
+        "appId": "com.zzz.gacha-stats",
+        "productName": "ZZZ Gacha Stats",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "electron/**/*",
+            "build/**/*"
+        ],
+        "extraResources": [
+            {
+                "from": "node_modules/sql.js/dist/sql-wasm.wasm",
+                "to": "sql-wasm.wasm"
+            }
+        ],
+        "win": {
+            "icon": "build/icon.ico",
+            "target": "dir"
+        }
+    }
+}
