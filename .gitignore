@@ -1,13 +1,25 @@
+# === 依赖 ===
 node_modules/
-dist/
-.cache/
-data/
-*.log
 
-package-lock.json
-*.db
-*.db-journal
+# === 构建产物 ===
+dist/
 out/
 release/
+
+# === 运行时数据 ===
+data/
+*.db
+*.db-journal
+
+# === 缓存与临时文件 ===
+.cache/
+*.log
+
+# === 工具配置（本地） ===
+.claude/
+CLAUDE.md
+
+# === 个人/本地文件（不入库） ===
 计划书.md
 启动.bat
+package-lock.json

@@ -1,9 +1,16 @@
 import React, { useRef, useCallback } from 'react'
 import html2canvas from 'html2canvas'
-import { RANK_COLORS, RANK_LABELS, formatTime, formatDate, getPityColor, groupByDate } from '../utils'
+import { formatTime, formatDate, getPityColor, groupByDate } from '../utils'
 
-export default function ShareExport({ data, iconMap, pityCount, poolName, uid, rankFilter }) {
+const DEFAULT_RANK_CONFIG = {
+  4: { label: 'S', fullLabel: 'S级', color: '#f59e0b' },
+  3: { label: 'A', fullLabel: 'A级', color: '#8b5cf6' },
+  2: { label: 'B', fullLabel: 'B级', color: '#94a3b8' },
+}
+
+export default function ShareExport({ data, iconMap, pityCount, poolName, uid, rankFilter, gameTitle = '绝区零 · 抽卡统计', rankColors, pityMax = 90 }) {
   const exportRef = useRef(null)
+  const config = rankColors || DEFAULT_RANK_CONFIG
 
   const handleExport = useCallback(async () => {
     if (!exportRef.current) return
@@ -18,16 +25,17 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
         backgroundColor: '#f8fafc',
       })
 
+      const gamePrefix = gameTitle.includes('原神') ? 'Genshin' : 'ZZZ'
       const link = document.createElement('a')
-      link.download = `ZZZ_${poolName}_${new Date().toISOString().slice(0, 10)}.png`
+      link.download = `${gamePrefix}_${poolName}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
     } catch (e) {
       console.error('导出失败:', e)
     }
-  }, [poolName])
+  }, [poolName, gameTitle])
 
-  const pityColor = getPityColor(pityCount || 0, 90)
+  const pityColor = getPityColor(pityCount || 0, pityMax)
   const itemsToShow = groupByDate(data || [])
 
   return (
@@ -59,7 +67,7 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
           marginBottom: 8,
           letterSpacing: '-0.5px',
         }}>
-          绝区零 · 抽卡统计
+          {gameTitle}
         </div>
         <div style={{
           fontSize: 20,
@@ -93,7 +101,7 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
             <div style={{
               width: '100%',
               height: 12,
-              background: 'linear-gradient(90deg, #8b5cf6, #d97706, #f59e0b)',
+              background: 'linear-gradient(90deg, #22c55e, #eab308, #ef4444)',
               borderRadius: 6,
               position: 'relative',
               marginBottom: 16,
@@ -103,7 +111,7 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
                 right: 0,
                 top: 0,
                 bottom: 0,
-                width: `${Math.max(0, (1 - pityCount / 90) * 100)}%`,
+                width: `${Math.max(0, (1 - pityCount / pityMax) * 100)}%`,
                 background: '#f1f5f9',
                 borderRadius: '0 6px 6px 0',
               }} />
@@ -113,9 +121,9 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontSize: 20, fontWeight: 500, color: '#64748b' }}>当前已调频数</span>
+              <span style={{ fontSize: 20, fontWeight: 500, color: '#64748b' }}>当前祈愿数</span>
               <span style={{ fontSize: 36, fontWeight: 800, color: pityColor, letterSpacing: '-1px' }}>
-                {pityCount}<span style={{ fontSize: 18, fontWeight: 500, color: '#94a3b8' }}>/90</span>
+                {pityCount}<span style={{ fontSize: 18, fontWeight: 500, color: '#94a3b8' }}>/{pityMax}</span>
               </span>
             </div>
           </div>
@@ -124,8 +132,9 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {itemsToShow.map((item, index) => {
             const iconUrl = iconMap[item.item_name] || item.icon
-            const rankColor = RANK_COLORS[item.rank_type] || '#94a3b8'
-            const rankLabel = RANK_LABELS[item.rank_type] || '?'
+            const rankConfig = config[item.rank_type] || { label: '?', fullLabel: '?', color: '#94a3b8' }
+            const rankColor = rankConfig.color
+            const rankLabel = rankConfig.label
 
             return (
               <div key={item.id || index}>

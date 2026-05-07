@@ -7,7 +7,7 @@ export default function TitleBar() {
     <div className="title-bar">
       <div className="title-bar-left">
         <img className="title-bar-icon" src={iconPath} alt="" draggable={false} />
-        <span className="title-bar-title">绝区零 · 抽卡统计</span>
+        <span className="title-bar-title">米游：抽卡统计</span>
       </div>
       <div className="title-bar-buttons">
         <button className="title-bar-btn" onClick={() => window.electronAPI.windowMinimize()}>

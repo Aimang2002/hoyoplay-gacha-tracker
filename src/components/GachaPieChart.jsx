@@ -1,14 +1,15 @@
 import React, { useMemo, useRef, useEffect } from 'react'
 import ReactECharts from 'echarts-for-react'
 
-const RANK_CONFIG = {
+const DEFAULT_RANK_CONFIG = {
   4: { label: 'S级', color: '#f59e0b' },
   3: { label: 'A级', color: '#8b5cf6' },
   2: { label: 'B级', color: '#94a3b8' },
 }
 
-export default function GachaPieChart({ pool, stats, counts, isActive, onClick }) {
+export default function GachaPieChart({ pool, stats, counts, isActive, onClick, rankColors }) {
   const chartRef = useRef(null)
+  const config = rankColors || DEFAULT_RANK_CONFIG
 
   useEffect(() => {
     const handleResize = () => {
@@ -22,48 +23,34 @@ export default function GachaPieChart({ pool, stats, counts, isActive, onClick }
   }, [])
 
   const chartOption = useMemo(() => {
-    const { total = 0, sCount = 0, aCount = 0, bCount = 0 } = counts
+    const total = counts.total || 0
     if (total === 0) return null
 
     const pieData = []
-    if (sCount > 0) pieData.push({
-      name: 'S级', value: sCount, rankType: 4,
-      itemStyle: {
-        color: RANK_CONFIG[4].color,
-        shadowBlur: 12,
-        shadowColor: 'rgba(245, 158, 11, 0.35)',
-      },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 20,
-          shadowColor: 'rgba(245, 158, 11, 0.4)',
-        }
+
+    // Build pie data from rankColors config
+    for (const [rank, rankConfig] of Object.entries(config)) {
+      const countKey = `rank${rank}Count`
+      const count = counts[countKey] || 0
+      if (count > 0) {
+        pieData.push({
+          name: rankConfig.fullLabel || rankConfig.label,
+          value: count,
+          rankType: parseInt(rank),
+          itemStyle: {
+            color: rankConfig.color,
+            shadowBlur: rank === '4' || rank === '5' ? 12 : 8,
+            shadowColor: `${rankConfig.color}${rank === '4' || rank === '5' ? '59' : '4d'}`,
+          },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 20,
+              shadowColor: `${rankConfig.color}66`,
+            }
+          }
+        })
       }
-    })
-    if (aCount > 0) pieData.push({
-      name: 'A级', value: aCount, rankType: 3,
-      itemStyle: {
-        color: RANK_CONFIG[3].color,
-        shadowBlur: 8,
-        shadowColor: 'rgba(139, 92, 246, 0.3)',
-      },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 20,
-          shadowColor: 'rgba(139, 92, 246, 0.4)',
-        }
-      }
-    })
-    if (bCount > 0) pieData.push({
-      name: 'B级', value: bCount, rankType: 2,
-      itemStyle: { color: RANK_CONFIG[2].color },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 16,
-          shadowColor: 'rgba(148, 163, 184, 0.35)',
-        }
-      }
-    })
+    }
 
     if (pieData.length === 0) return null
 
@@ -112,9 +99,13 @@ export default function GachaPieChart({ pool, stats, counts, isActive, onClick }
         data: pieData,
       }],
     }
-  }, [counts])
+  }, [counts, config])
 
-  const { total = 0, sCount = 0, aCount = 0, bCount = 0 } = counts
+  const total = counts.total || 0
+
+  // Get first two ranks for summary display
+  const sortedRanks = Object.keys(config).map(Number).sort((a, b) => b - a)
+  const displayRanks = sortedRanks.slice(0, 3)
 
   return (
     <div
@@ -141,18 +132,21 @@ export default function GachaPieChart({ pool, stats, counts, isActive, onClick }
       )}
 
       <div className="pie-summary">
-        <div className="summary-item s-rank">
-          <span className="summary-label">S</span>
-          <span className="summary-value">{sCount}</span>
-        </div>
-        <div className="summary-item a-rank">
-          <span className="summary-label">A</span>
-          <span className="summary-value">{aCount}</span>
-        </div>
-        <div className="summary-item b-rank">
-          <span className="summary-label">B</span>
-          <span className="summary-value">{bCount}</span>
-        </div>
+        {displayRanks.map(rank => {
+          const rankConfig = config[rank]
+          const countKey = `rank${rank}Count`
+          const count = counts[countKey] || 0
+          const sortedAllRanks = Object.keys(config).map(Number).sort((a, b) => b - a)
+          const rankIndex = sortedAllRanks.indexOf(rank)
+          const rankClass = rankIndex === 0 ? 's-rank' : rankIndex === 1 ? 'a-rank' : 'b-rank'
+
+          return (
+            <div key={rank} className={`summary-item ${rankClass}`}>
+              <span className="summary-label">{rankConfig.label}</span>
+              <span className="summary-value">{count}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

@@ -1,7 +1,30 @@
 import React from 'react'
-import { RANK_COLORS, RANK_LABELS, formatTime, formatDate, getPityColor, groupByDate } from '../utils'
+import { formatTime, formatDate, getPityColor, groupByDate } from '../utils'
 
-export default function STimeline({ data, iconMap, rankFilter, pityCount }) {
+const DEFAULT_RANK_CONFIG = {
+  4: { label: 'S', fullLabel: 'S级', color: '#f59e0b' },
+  3: { label: 'A', fullLabel: 'A级', color: '#8b5cf6' },
+  2: { label: 'B', fullLabel: 'B级', color: '#94a3b8' },
+}
+
+function getPityType(data, standardItems) {
+  if (!data || data.length === 0 || !standardItems) return null
+
+  const topRank = data[0]?.rank_type
+  if (!topRank) return null
+
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].rank_type >= topRank) {
+      const isStandard = standardItems.includes(data[i].item_name)
+      return isStandard ? '大保底' : '小保底'
+    }
+  }
+  return null
+}
+
+export default function STimeline({ data, iconMap, rankFilter, pityCount, rankColors, pityMax = 90, standardItems = [], recordLabel = '祈愿记录' }) {
+  const config = rankColors || DEFAULT_RANK_CONFIG
+
   if (!data || data.length === 0) {
     return (
       <div className="timeline-empty">
@@ -10,8 +33,9 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount }) {
     )
   }
 
-  const pityColor = getPityColor(pityCount || 0, 90)
+  const pityColor = getPityColor(pityCount || 0, pityMax)
   const grouped = groupByDate(data)
+  const pityType = getPityType(data, standardItems)
 
   return (
     <div className="timeline-list" id="timeline-export-area">
@@ -20,20 +44,28 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount }) {
           <div className="pity-bar-track">
             <div
               className="pity-bar-unfilled"
-              style={{ width: `${Math.max(0, (1 - pityCount / 90) * 100)}%` }}
+              style={{ width: `${Math.max(0, (1 - pityCount / pityMax) * 100)}%` }}
             />
           </div>
           <div className="pity-bar-info">
-            <span className="pity-label">当前已调频数</span>
-            <span className="pity-value" style={{ color: pityColor }}>{pityCount}<span className="pity-max">/90</span></span>
+            <span className="pity-label">当前{recordLabel.replace('记录', '')}数</span>
+            <div className="pity-right">
+              {pityType && (
+                <span className={`pity-type ${pityType === '大保底' ? 'pity-guaranteed' : 'pity-fifty'}`}>
+                  {pityType}
+                </span>
+              )}
+              <span className="pity-value" style={{ color: pityColor }}>{pityCount}<span className="pity-max">/{pityMax}</span></span>
+            </div>
           </div>
         </div>
       )}
 
       {grouped.map((item, index) => {
         const iconUrl = iconMap[item.item_name] || item.icon
-        const rankColor = RANK_COLORS[item.rank_type] || '#94a3b8'
-        const rankLabel = RANK_LABELS[item.rank_type] || '?'
+        const rankConfig = config[item.rank_type] || { label: '?', fullLabel: '?', color: '#94a3b8' }
+        const rankColor = rankConfig.color
+        const rankLabel = rankConfig.label
 
         return (
           <div className="tl-item" key={item.id || index} style={{ animationDelay: `${index * 50}ms` }}>

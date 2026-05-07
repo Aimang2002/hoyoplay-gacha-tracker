@@ -1,15 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  parseLog: () => ipcRenderer.invoke('parse-log'),
-  syncData: () => ipcRenderer.invoke('sync-data'),
-  syncIcons: () => ipcRenderer.invoke('sync-icons'),
-  getAccounts: () => ipcRenderer.invoke('get-accounts'),
-  getGachaStats: (uid, gachaType, minRank) => ipcRenderer.invoke('get-gacha-stats', uid, gachaType, minRank),
-  getTimeline: (uid, gachaType, minRank) => ipcRenderer.invoke('get-timeline', uid, gachaType, minRank),
-  getIconMap: () => ipcRenderer.invoke('get-icon-map'),
-  getGachaCount: (uid, gachaType) => ipcRenderer.invoke('get-gacha-count', uid, gachaType),
-  getCurrentPity: (uid, gachaType, minRank) => ipcRenderer.invoke('get-current-pity', uid, gachaType, minRank),
+  parseLog: (game) => ipcRenderer.invoke('parse-log', game),
+  syncData: (game) => ipcRenderer.invoke('sync-data', game),
+  syncIcons: (game) => ipcRenderer.invoke('sync-icons', game),
+  getAccounts: (game) => ipcRenderer.invoke('get-accounts', game),
+  getGachaStats: (uid, gachaType, minRank, game) => ipcRenderer.invoke('get-gacha-stats', uid, gachaType, minRank, game),
+  getTimeline: (uid, gachaType, minRank, game) => ipcRenderer.invoke('get-timeline', uid, gachaType, minRank, game),
+  getIconMap: (game) => ipcRenderer.invoke('get-icon-map', game),
+  getGachaCount: (uid, gachaType, game) => ipcRenderer.invoke('get-gacha-count', uid, gachaType, game),
+  getCurrentPity: (uid, gachaType, minRank, game) => ipcRenderer.invoke('get-current-pity', uid, gachaType, minRank, game),
 
   onSyncProgress: (callback) => {
     const handler = (event, data) => callback(data)

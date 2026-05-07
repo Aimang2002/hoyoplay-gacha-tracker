@@ -25,15 +25,15 @@ function getPityColor(count, max) {
   const ratio = Math.min(count / max, 1)
   if (ratio < 0.5) {
     const t = ratio / 0.5
-    const r = Math.round(139 + (217 - 139) * t)
-    const g = Math.round(92 + (119 - 92) * t)
-    const b = Math.round(246 + (6 - 246) * t)
+    const r = Math.round(34 + (234 - 34) * t)
+    const g = Math.round(197 + (179 - 197) * t)
+    const b = Math.round(94 + (8 - 94) * t)
     return `rgb(${r},${g},${b})`
   } else {
     const t = (ratio - 0.5) / 0.5
-    const r = Math.round(217 + (245 - 217) * t)
-    const g = Math.round(119 + (158 - 119) * t)
-    const b = Math.round(6 + (11 - 6) * t)
+    const r = Math.round(234 + (239 - 234) * t)
+    const g = Math.round(179 + (68 - 179) * t)
+    const b = Math.round(8 + (68 - 8) * t)
     return `rgb(${r},${g},${b})`
   }
 }

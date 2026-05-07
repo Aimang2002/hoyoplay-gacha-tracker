@@ -6,47 +6,110 @@ const { app } = require('electron')
 let db
 let dbPath
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS accounts (
-  uid TEXT PRIMARY KEY,
-  authkey TEXT NOT NULL,
-  region TEXT NOT NULL,
-  game_biz TEXT NOT NULL,
-  last_sync_time DATETIME,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+const TABLE_SCHEMAS = {
+  accounts: (table) => `
+    CREATE TABLE IF NOT EXISTS ${table} (
+      uid TEXT NOT NULL,
+      authkey TEXT NOT NULL,
+      region TEXT NOT NULL,
+      game_biz TEXT NOT NULL,
+      last_sync_time DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(uid)
+    )`,
+  gacha_records: (table) => `
+    CREATE TABLE IF NOT EXISTS ${table} (
+      id TEXT PRIMARY KEY,
+      uid TEXT NOT NULL,
+      gacha_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      rank_type INTEGER NOT NULL,
+      gacha_time DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+  icons: (table) => `
+    CREATE TABLE IF NOT EXISTS ${table} (
+      alias_name TEXT NOT NULL,
+      icon_url TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(alias_name)
+    )`,
+}
 
-CREATE TABLE IF NOT EXISTS icons (
-  alias_name TEXT PRIMARY KEY,
-  icon_url TEXT NOT NULL,
-  item_type TEXT NOT NULL,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+const TABLE_INDEXES = {
+  gacha_records: (table) => [
+    `CREATE INDEX IF NOT EXISTS idx_${table}_uid ON ${table}(uid)`,
+    `CREATE INDEX IF NOT EXISTS idx_${table}_type ON ${table}(gacha_type)`,
+    `CREATE INDEX IF NOT EXISTS idx_${table}_rank ON ${table}(rank_type)`,
+    `CREATE INDEX IF NOT EXISTS idx_${table}_time ON ${table}(gacha_time)`,
+  ],
+  accounts: () => [],
+  icons: () => [],
+}
 
-CREATE TABLE IF NOT EXISTS gacha_records (
-  id TEXT PRIMARY KEY,
-  uid TEXT NOT NULL,
-  gacha_type TEXT NOT NULL,
-  item_id TEXT NOT NULL,
-  item_name TEXT NOT NULL,
-  item_type TEXT NOT NULL,
-  rank_type INTEGER NOT NULL,
-  gacha_time DATETIME NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (uid) REFERENCES accounts(uid)
-);
+const GAMES_LIST = ['zzz', 'genshin']
 
-CREATE INDEX IF NOT EXISTS idx_gacha_uid ON gacha_records(uid);
-CREATE INDEX IF NOT EXISTS idx_gacha_type ON gacha_records(gacha_type);
-CREATE INDEX IF NOT EXISTS idx_gacha_rank ON gacha_records(rank_type);
-CREATE INDEX IF NOT EXISTS idx_gacha_time ON gacha_records(gacha_time);
-`
+function tbl(game, base) {
+  return `${game}_${base}`
+}
 
 function saveDB() {
   if (!db) return
   const data = db.export()
   const buffer = Buffer.from(data)
   fs.writeFileSync(dbPath, buffer)
+}
+
+function tableExists(tableName) {
+  const result = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`)
+  return result.length > 0 && result[0].values.length > 0
+}
+
+function migrateOldTables() {
+  const oldTables = ['accounts', 'gacha_records', 'icons']
+  const hasOld = oldTables.some(t => tableExists(t))
+  if (!hasOld) return
+
+  console.log('[DB] 检测到旧版统一表，开始迁移...')
+
+  for (const game of GAMES_LIST) {
+    for (const base of oldTables) {
+      const newTable = tbl(game, base)
+      if (tableExists(newTable)) continue
+
+      db.run(TABLE_SCHEMAS[base](newTable))
+      ;(TABLE_INDEXES[base](newTable) || []).forEach(idx => db.run(idx))
+
+      if (tableExists(base)) {
+        try {
+          if (base === 'accounts') {
+            db.run(`INSERT OR IGNORE INTO ${newTable} (uid, authkey, region, game_biz, last_sync_time, created_at)
+              SELECT uid, authkey, region, game_biz, last_sync_time, created_at FROM ${base} WHERE game = ?`, [game])
+          } else if (base === 'gacha_records') {
+            db.run(`INSERT OR IGNORE INTO ${newTable} (id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time, created_at)
+              SELECT id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time, created_at FROM ${base} WHERE game = ?`, [game])
+          } else if (base === 'icons') {
+            db.run(`INSERT OR IGNORE INTO ${newTable} (alias_name, icon_url, item_type, updated_at)
+              SELECT alias_name, icon_url, item_type, updated_at FROM ${base} WHERE game = ?`, [game])
+          }
+        } catch (e) {
+          console.error(`[DB] 迁移 ${base} → ${newTable} 失败:`, e.message)
+        }
+      }
+    }
+  }
+
+  for (const t of oldTables) {
+    if (tableExists(t)) {
+      db.run(`DROP TABLE IF EXISTS ${t}`)
+    }
+  }
+
+  saveDB()
+  console.log('[DB] 旧表迁移完成')
 }
 
 async function initDB() {
@@ -66,14 +129,26 @@ async function initDB() {
   }
   const SQL = await initSqlJs({ locateFile: () => wasmPath })
 
-  if (fs.existsSync(dbPath)) {
+  const isNewDB = !fs.existsSync(dbPath)
+  if (isNewDB) {
+    db = new SQL.Database()
+  } else {
     const fileBuffer = fs.readFileSync(dbPath)
     db = new SQL.Database(fileBuffer)
-  } else {
-    db = new SQL.Database()
   }
 
-  db.run(SCHEMA)
+  for (const game of GAMES_LIST) {
+    for (const [base, schemaFn] of Object.entries(TABLE_SCHEMAS)) {
+      const table = tbl(game, base)
+      db.run(schemaFn(table))
+      ;(TABLE_INDEXES[base](table) || []).forEach(idx => db.run(idx))
+    }
+  }
+
+  if (!isNewDB) {
+    migrateOldTables()
+  }
+
   saveDB()
 }
 
@@ -100,83 +175,74 @@ function queryOne(sql, params = []) {
   return results.length > 0 ? results[0] : null
 }
 
-function getAccounts() {
-  return queryAll('SELECT uid, region, game_biz, last_sync_time FROM accounts')
+function getAccounts(game = 'zzz') {
+  return queryAll(`SELECT uid, region, game_biz, last_sync_time FROM ${tbl(game, 'accounts')}`, [])
 }
 
-function upsertAccount(uid, authkey, region, gameBiz) {
-  db.run(`INSERT OR REPLACE INTO accounts (uid, authkey, region, game_biz, created_at) 
-    VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM accounts WHERE uid = ?), CURRENT_TIMESTAMP))`, 
+function upsertAccount(uid, authkey, region, gameBiz, game = 'zzz') {
+  db.run(`INSERT OR REPLACE INTO ${tbl(game, 'accounts')} (uid, authkey, region, game_biz, created_at)
+    VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM ${tbl(game, 'accounts')} WHERE uid = ?), CURRENT_TIMESTAMP))`,
     [uid, authkey, region, gameBiz, uid])
   saveDB()
 }
 
-function upsertIcons(icons) {
+function upsertIcons(icons, game = 'zzz') {
+  const table = tbl(game, 'icons')
   for (const item of icons) {
-    db.run(`INSERT OR REPLACE INTO icons (alias_name, icon_url, item_type, updated_at) 
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)`, 
+    db.run(`INSERT OR REPLACE INTO ${table} (alias_name, icon_url, item_type, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
       [item.alias_name, item.icon_url, item.item_type])
   }
   saveDB()
 }
 
-function insertGachaRecords(records) {
-  const before = queryOne('SELECT COUNT(*) as c FROM gacha_records').c
+function insertGachaRecords(records, game = 'zzz') {
+  const table = tbl(game, 'gacha_records')
   for (const r of records) {
-    db.run(`INSERT OR IGNORE INTO gacha_records (id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time) 
+    db.run(`INSERT OR IGNORE INTO ${table} (id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [r.id, r.uid, r.gacha_type, r.item_id, r.name, r.item_type, parseInt(r.rank_type), r.time])
   }
   saveDB()
-  const after = queryOne('SELECT COUNT(*) as c FROM gacha_records').c
-  return after - before
 }
 
-function getExistingIds(uid, gachaType) {
-  const rows = queryAll('SELECT id FROM gacha_records WHERE uid = ? AND gacha_type = ?', [uid, gachaType])
+function getExistingIds(uid, gachaType, game = 'zzz') {
+  const rows = queryAll(`SELECT id FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ?`, [uid, gachaType])
   return new Set(rows.map(r => r.id))
 }
 
-function getLatestRecordId(uid, gachaType) {
-  const row = queryOne(
-    `SELECT id FROM gacha_records WHERE uid = ? AND gacha_type = ? ORDER BY gacha_time DESC LIMIT 1`,
-    [uid, gachaType]
-  )
-  return row ? row.id : null
-}
-
-function getGachaStats(uid, gachaType, minRank = 3) {
+function getGachaStats(uid, gachaType, minRank = 3, game = 'zzz') {
   return queryAll(
-    `SELECT item_name, rank_type, COUNT(*) as count 
-     FROM gacha_records 
-     WHERE uid = ? AND gacha_type = ? AND rank_type >= ? 
-     GROUP BY item_name, rank_type 
+    `SELECT item_name, rank_type, COUNT(*) as count
+     FROM ${tbl(game, 'gacha_records')}
+     WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
+     GROUP BY item_name, rank_type
      ORDER BY rank_type DESC, count DESC`,
     [uid, gachaType, minRank]
   )
 }
 
-function getTimeline(uid, gachaType, minRank = 4) {
+function getTimeline(uid, gachaType, minRank = 4, game = 'zzz') {
   return queryAll(
-    `SELECT item_name, gacha_time, rank_type, gacha_type, id 
-     FROM gacha_records 
-     WHERE uid = ? AND gacha_type = ? AND rank_type >= ? 
+    `SELECT item_name, gacha_time, rank_type, gacha_type, id
+     FROM ${tbl(game, 'gacha_records')}
+     WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
      ORDER BY gacha_time ASC, id ASC`,
     [uid, gachaType, minRank]
   )
 }
 
-function getAllOrderedIds(uid, gachaType) {
+function getAllOrderedIds(uid, gachaType, game = 'zzz') {
   return queryAll(
-    `SELECT id FROM gacha_records 
-     WHERE uid = ? AND gacha_type = ? 
+    `SELECT id FROM ${tbl(game, 'gacha_records')}
+     WHERE uid = ? AND gacha_type = ?
      ORDER BY gacha_time ASC, id ASC`,
     [uid, gachaType]
   )
 }
 
-function getIconMap() {
-  const rows = queryAll('SELECT alias_name, icon_url FROM icons')
+function getIconMap(game = 'zzz') {
+  const rows = queryAll(`SELECT alias_name, icon_url FROM ${tbl(game, 'icons')}`, [])
   const map = {}
   for (const row of rows) {
     map[row.alias_name] = row.icon_url
@@ -185,39 +251,30 @@ function getIconMap() {
   return map
 }
 
-function updateSyncTime(uid) {
-  db.run('UPDATE accounts SET last_sync_time = CURRENT_TIMESTAMP WHERE uid = ?', [uid])
+function updateSyncTime(uid, game = 'zzz') {
+  db.run(`UPDATE ${tbl(game, 'accounts')} SET last_sync_time = CURRENT_TIMESTAMP WHERE uid = ?`, [uid])
   saveDB()
 }
 
-function getGachaCountByType(uid, gachaType) {
-  const row = queryOne('SELECT COUNT(*) as count FROM gacha_records WHERE uid = ? AND gacha_type = ?', [uid, gachaType])
+function getGachaCountByType(uid, gachaType, game = 'zzz') {
+  const row = queryOne(`SELECT COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ?`, [uid, gachaType])
   return row ? row.count : 0
 }
 
-function getGachaCountByRank(uid, gachaType, rankType) {
-  const row = queryOne('SELECT COUNT(*) as count FROM gacha_records WHERE uid = ? AND gacha_type = ? AND rank_type = ?', [uid, gachaType, rankType])
+function getGachaCountByRank(uid, gachaType, rankType, game = 'zzz') {
+  const row = queryOne(`SELECT COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ? AND rank_type = ?`, [uid, gachaType, rankType])
   return row ? row.count : 0
 }
 
-function getPullPosition(uid, gachaType, gachaTime, recordId) {
-  const row = queryOne(
-    `SELECT COUNT(*) as count FROM gacha_records 
-     WHERE uid = ? AND gacha_type = ? AND (gacha_time < ? OR (gacha_time = ? AND id <= ?))`,
-    [uid, gachaType, gachaTime, gachaTime, recordId]
-  )
-  return row ? row.count : 0
-}
-
-function getCurrentPity(uid, gachaType, minRank) {
+function getCurrentPity(uid, gachaType, minRank, game = 'zzz') {
   const allIds = queryAll(
-    `SELECT id FROM gacha_records WHERE uid = ? AND gacha_type = ? ORDER BY gacha_time ASC, id ASC`,
+    `SELECT id FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ? ORDER BY gacha_time ASC, id ASC`,
     [uid, gachaType]
   )
   if (allIds.length === 0) return 0
 
   const lastHit = queryOne(
-    `SELECT id FROM gacha_records
+    `SELECT id FROM ${tbl(game, 'gacha_records')}
      WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
      ORDER BY gacha_time DESC LIMIT 1`,
     [uid, gachaType, minRank]
@@ -231,7 +288,7 @@ function getCurrentPity(uid, gachaType, minRank) {
 
 module.exports = {
   initDB, closeDB, getAccounts, upsertAccount, upsertIcons,
-  insertGachaRecords, getLatestRecordId, getExistingIds, getGachaStats, getTimeline, getIconMap,
-  updateSyncTime, getGachaCountByType, getGachaCountByRank, getPullPosition,
+  insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap,
+  updateSyncTime, getGachaCountByType, getGachaCountByRank,
   getCurrentPity, getAllOrderedIds
 }
