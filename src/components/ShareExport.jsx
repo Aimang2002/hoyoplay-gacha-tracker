@@ -1,6 +1,6 @@
 import React, { useRef, useCallback } from 'react'
 import html2canvas from 'html2canvas'
-import { formatTime, formatDate, getPityColor, groupByDate } from '../utils'
+import { formatTime, formatDate, getPityColor, groupByDate, getCaptureRadianceProb } from '../utils'
 
 const DEFAULT_RANK_CONFIG = {
   4: { label: 'S', fullLabel: 'S级', color: '#f59e0b' },
@@ -8,7 +8,7 @@ const DEFAULT_RANK_CONFIG = {
   2: { label: 'B', fullLabel: 'B级', color: '#94a3b8' },
 }
 
-export default function ShareExport({ data, iconMap, pityCount, poolName, uid, rankFilter, gameTitle = '绝区零 · 抽卡统计', rankColors, pityMax = 90 }) {
+export default function ShareExport({ data, iconMap, pityCount, poolName, uid, rankFilter, gameTitle = '绝区零 · 抽卡统计', rankColors, pityMax = 90, consecutiveLosses = 0, currentGame = 'zzz' }) {
   const exportRef = useRef(null)
   const config = rankColors || DEFAULT_RANK_CONFIG
 
@@ -37,6 +37,8 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
 
   const pityColor = getPityColor(pityCount || 0, pityMax)
   const itemsToShow = groupByDate(data || [])
+  const isGenshinSmallPity = currentGame === 'genshin' && consecutiveLosses > 0
+  const captureRadianceProb = isGenshinSmallPity ? getCaptureRadianceProb(consecutiveLosses) : 0
 
   return (
     <>
@@ -122,9 +124,23 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
               alignItems: 'center',
             }}>
               <span style={{ fontSize: 20, fontWeight: 500, color: '#64748b' }}>当前祈愿数</span>
-              <span style={{ fontSize: 36, fontWeight: 800, color: pityColor, letterSpacing: '-1px' }}>
-                {pityCount}<span style={{ fontSize: 18, fontWeight: 500, color: '#94a3b8' }}>/{pityMax}</span>
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {isGenshinSmallPity && captureRadianceProb > 0 && (
+                  <span style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: '#e879f9',
+                    background: 'rgba(232, 121, 249, 0.1)',
+                    padding: '4px 12px',
+                    borderRadius: 8,
+                  }}>
+                    明光 {captureRadianceProb === 100 ? '100%' : `${captureRadianceProb}%`}
+                  </span>
+                )}
+                <span style={{ fontSize: 36, fontWeight: 800, color: pityColor, letterSpacing: '-1px' }}>
+                  {pityCount}<span style={{ fontSize: 18, fontWeight: 500, color: '#94a3b8' }}>/{pityMax}</span>
+                </span>
+              </div>
             </div>
           </div>
         )}

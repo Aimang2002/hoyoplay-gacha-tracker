@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getIconMap: (game) => ipcRenderer.invoke('get-icon-map', game),
   getGachaCount: (uid, gachaType, game) => ipcRenderer.invoke('get-gacha-count', uid, gachaType, game),
   getCurrentPity: (uid, gachaType, minRank, game) => ipcRenderer.invoke('get-current-pity', uid, gachaType, minRank, game),
+  getConsecutiveLosses: (uid, gachaType, game) => ipcRenderer.invoke('get-consecutive-losses', uid, gachaType, game),
 
   onSyncProgress: (callback) => {
     const handler = (event, data) => callback(data)

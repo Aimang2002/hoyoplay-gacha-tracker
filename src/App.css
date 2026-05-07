@@ -733,6 +733,11 @@ body {
   background: rgba(245, 158, 11, 0.1);
 }
 
+.pity-radiance {
+  color: #e879f9;
+  background: rgba(232, 121, 249, 0.1);
+}
+
 .pity-value {
   font-size: 18px;
   font-weight: 700;

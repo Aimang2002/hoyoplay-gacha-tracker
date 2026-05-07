@@ -1,5 +1,5 @@
 import React from 'react'
-import { formatTime, formatDate, getPityColor, groupByDate } from '../utils'
+import { formatTime, formatDate, getPityColor, groupByDate, getCaptureRadianceProb } from '../utils'
 
 const DEFAULT_RANK_CONFIG = {
   4: { label: 'S', fullLabel: 'S级', color: '#f59e0b' },
@@ -10,7 +10,10 @@ const DEFAULT_RANK_CONFIG = {
 function getPityType(data, standardItems) {
   if (!data || data.length === 0 || !standardItems) return null
 
-  const topRank = data[0]?.rank_type
+  let topRank = 0
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].rank_type > topRank) topRank = data[i].rank_type
+  }
   if (!topRank) return null
 
   for (let i = 0; i < data.length; i++) {
@@ -22,7 +25,7 @@ function getPityType(data, standardItems) {
   return null
 }
 
-export default function STimeline({ data, iconMap, rankFilter, pityCount, rankColors, pityMax = 90, standardItems = [], recordLabel = '祈愿记录' }) {
+export default function STimeline({ data, iconMap, rankFilter, pityCount, rankColors, pityMax = 90, standardItems = [], recordLabel = '祈愿记录', consecutiveLosses = 0, currentGame = 'zzz' }) {
   const config = rankColors || DEFAULT_RANK_CONFIG
 
   if (!data || data.length === 0) {
@@ -36,6 +39,8 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount, rankCo
   const pityColor = getPityColor(pityCount || 0, pityMax)
   const grouped = groupByDate(data)
   const pityType = getPityType(data, standardItems)
+  const isGenshinSmallPity = currentGame === 'genshin' && pityType === '小保底'
+  const captureRadianceProb = isGenshinSmallPity ? getCaptureRadianceProb(consecutiveLosses) : 0
 
   return (
     <div className="timeline-list" id="timeline-export-area">
@@ -53,6 +58,11 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount, rankCo
               {pityType && (
                 <span className={`pity-type ${pityType === '大保底' ? 'pity-guaranteed' : 'pity-fifty'}`}>
                   {pityType}
+                </span>
+              )}
+              {isGenshinSmallPity && captureRadianceProb > 0 && (
+                <span className="pity-type pity-radiance">
+                  明光 {captureRadianceProb === 100 ? '100%' : `${captureRadianceProb}%`}
                 </span>
               )}
               <span className="pity-value" style={{ color: pityColor }}>{pityCount}<span className="pity-max">/{pityMax}</span></span>

@@ -5,7 +5,7 @@ if (app.isPackaged) {
   app.setPath('userData', path.join(path.dirname(process.execPath), 'data'))
   app.setPath('cache', path.join(path.dirname(process.execPath), 'data', 'cache'))
 }
-const { initDB, closeDB, getAccounts, upsertAccount, upsertIcons, insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap, updateSyncTime, getGachaCountByType, getGachaCountByRank, getCurrentPity, getAllOrderedIds } = require('./db')
+const { initDB, closeDB, getAccounts, upsertAccount, upsertIcons, insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap, updateSyncTime, getGachaCountByType, getGachaCountByRank, getCurrentPity, getAllOrderedIds, getConsecutiveLosses } = require('./db')
 const { getParser } = require('./parsers')
 const { fetchAllGachaRecords, fetchWikiIcons, fetchUidFromApi } = require('./api')
 const { GAMES } = require('./config')
@@ -232,6 +232,14 @@ ipcMain.handle('get-gacha-count', async (event, uid, gachaType, game = 'zzz') =>
 
 ipcMain.handle('get-current-pity', async (event, uid, gachaType, minRank, game = 'zzz') => {
   return getCurrentPity(uid, gachaType, minRank || 4, game)
+})
+
+ipcMain.handle('get-consecutive-losses', async (event, uid, gachaType, game = 'zzz') => {
+  const gameConfig = GAMES[game] || GAMES.genshin
+  const topRank = Object.keys(gameConfig.rankConfig).map(Number).sort((a, b) => b - a)[0]
+  const standardItems = gameConfig.standardItems || []
+  if (!standardItems || standardItems.length === 0) return 0
+  return getConsecutiveLosses(uid, gachaType, topRank, standardItems, game)
 })
 
 ipcMain.handle('window-minimize', () => mainWindow.minimize())

@@ -49,4 +49,11 @@ function groupByDate(items) {
   return groups
 }
 
-export { RANK_COLORS, RANK_LABELS, formatTime, formatDate, getDateKey, getPityColor, groupByDate }
+function getCaptureRadianceProb(consecutiveLosses) {
+  if (consecutiveLosses <= 0) return 0
+  if (consecutiveLosses === 1) return 4.55
+  if (consecutiveLosses === 2) return 45.45
+  return 100
+}
+
+export { RANK_COLORS, RANK_LABELS, formatTime, formatDate, getDateKey, getPityColor, groupByDate, getCaptureRadianceProb }

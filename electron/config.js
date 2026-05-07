@@ -23,6 +23,7 @@ const GAMES = {
       2: { label: 'B', fullLabel: 'B级', color: '#94a3b8' },
     },
     pityMax: 90,
+    standardItems: ['11号', '莱卡恩', '丽娜', '珂蕾妲', '猫宫又奈', '格莉斯'],
     iconApi: 'https://act-api-takumi-static.mihoyo.com/common/blackboard/zzz_wiki/v1/home/content/list?app_sn=zzz_wiki&channel_id=2',
     apiUrl: 'https://public-operation-nap.mihoyo.com/common/gacha_record/api/getGachaLog',
   },
@@ -44,6 +45,7 @@ const GAMES = {
       3: { label: '3', fullLabel: '3星', color: '#94a3b8' },
     },
     pityMax: 90,
+    standardItems: ['琴', '刻晴', '迪卢克', '七七', '莫娜', '提纳里', '迪希雅', '梦见月瑞希'],
     iconApis: [
       'https://act-api-takumi-static.mihoyo.com/common/blackboard/ys_obc/v1/home/content/list?app_sn=ys_obc&channel_id=25',
       'https://act-api-takumi-static.mihoyo.com/common/blackboard/ys_obc/v1/home/content/list?app_sn=ys_obc&channel_id=5',

@@ -286,9 +286,51 @@ function getCurrentPity(uid, gachaType, minRank, game = 'zzz') {
   return allIds.length - hitIndex - 1
 }
 
+function getConsecutiveLosses(uid, gachaType, topRank, standardItems, game = 'zzz') {
+  if (!standardItems || standardItems.length === 0) return 0
+  if (game !== 'genshin') return 0
+
+  const cutoffDate = '2024-08-28'
+
+  const topRecords = queryAll(
+    `SELECT item_name, gacha_time FROM ${tbl(game, 'gacha_records')}
+     WHERE uid = ? AND gacha_type = ? AND rank_type >= ? AND gacha_time > ?
+     ORDER BY gacha_time ASC, id ASC`,
+    [uid, gachaType, topRank, cutoffDate]
+  )
+
+  if (topRecords.length === 0) return 0
+
+  const isLoss = (name) => standardItems.includes(name)
+
+  let isGuaranteed = false
+  let consecutiveLosses = 0
+
+  for (let i = 0; i < topRecords.length; i++) {
+    const isStandard = isLoss(topRecords[i].item_name)
+
+    if (isGuaranteed) {
+      if (!isStandard) {
+        isGuaranteed = false
+      }
+    } else {
+      if (isStandard) {
+        consecutiveLosses++
+        isGuaranteed = true
+      } else {
+        consecutiveLosses = 0
+      }
+    }
+  }
+
+  if (isGuaranteed) return 0
+
+  return consecutiveLosses
+}
+
 module.exports = {
   initDB, closeDB, getAccounts, upsertAccount, upsertIcons,
   insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap,
   updateSyncTime, getGachaCountByType, getGachaCountByRank,
-  getCurrentPity, getAllOrderedIds
+  getCurrentPity, getAllOrderedIds, getConsecutiveLosses
 }

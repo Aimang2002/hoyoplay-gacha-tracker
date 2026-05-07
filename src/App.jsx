@@ -19,6 +19,7 @@ export default function App() {
   const [countData, setCountData] = useState({})
   const [iconMap, setIconMap] = useState({})
   const [pityData, setPityData] = useState({})
+  const [lossData, setLossData] = useState({})
 
   const [switchingUid, setSwitchingUid] = useState(null)
 
@@ -83,6 +84,17 @@ export default function App() {
     setPityData(newPity)
   }, [currentUid, currentGame, GACHA_POOLS])
 
+  const loadLosses = useCallback(async (overrideUid) => {
+    const uid = overrideUid || currentUid
+    if (!uid) return
+    const newLoss = {}
+    for (const pool of GACHA_POOLS) {
+      const losses = await window.electronAPI.getConsecutiveLosses(uid, pool.type, currentGame)
+      newLoss[pool.type] = losses
+    }
+    setLossData(newLoss)
+  }, [currentUid, currentGame, GACHA_POOLS])
+
   useEffect(() => {
     loadAccounts().then(accs => {
       if (accs.length > 0 && !currentUid) {
@@ -103,6 +115,10 @@ export default function App() {
   useEffect(() => {
     if (currentUid && !switchingUid) loadPity()
   }, [currentUid, loadPity])
+
+  useEffect(() => {
+    if (currentUid && !switchingUid) loadLosses()
+  }, [currentUid, loadLosses])
 
   useEffect(() => {
     const cleanup1 = window.electronAPI.onSyncProgress((data) => {
@@ -137,6 +153,7 @@ export default function App() {
     await loadIconMap()
     await loadStats(syncUid || currentUid)
     await loadPity(syncUid || currentUid)
+    await loadLosses(syncUid || currentUid)
     setSwitchingUid(null)
   }
 
@@ -148,8 +165,10 @@ export default function App() {
     setTimelineData({})
     setCountData({})
     setPityData({})
+    setLossData({})
     await loadStats(uid)
     await loadPity(uid)
+    await loadLosses(uid)
     setSwitchingUid(null)
   }
 
@@ -174,6 +193,7 @@ export default function App() {
     setTimelineData({})
     setCountData({})
     setPityData({})
+    setLossData({})
     setActivePool(GAME_CONFIG[newGame].pools[0].type)
     setRankFilter(GAME_CONFIG[newGame].rankFilters[0].value)
 
@@ -384,6 +404,8 @@ export default function App() {
             rankFilter={rankFilter}
             gameTitle={gameConfig.title}
             rankColors={rankColors}
+            consecutiveLosses={lossData[activePool] || 0}
+            currentGame={currentGame}
           />
           <button
             className={`sync-btn ${syncing ? 'syncing' : ''}`}
@@ -450,6 +472,8 @@ export default function App() {
             pityMax={gameConfig.pityMax}
             standardItems={gameConfig.standardItems}
             recordLabel={gameConfig.recordLabel}
+            consecutiveLosses={lossData[activePool] || 0}
+            currentGame={currentGame}
           />
         </div>
       </div>
