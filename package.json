@@ -1,7 +1,7 @@
 {
-    "name": "zzz-gacha-stats",
+    "name": "hoyoplay-gacha-tracker",
     "version": "1.0.0",
-    "description": "绝区零抽卡统计工具",
+    "description": "米游抽卡统计工具",
     "license": "MIT",
     "main": "electron/main.js",
     "scripts": {
@@ -28,8 +28,8 @@
         "wait-on": "^8.0.1"
     },
     "build": {
-        "appId": "com.zzz.gacha-stats",
-        "productName": "ZZZ Gacha Stats",
+        "appId": "com.hoyoplay.gacha-tracker",
+        "productName": "HoyoPlay Gacha Tracker",
         "directories": {
             "output": "release"
         },
@@ -45,7 +45,6 @@
             }
         ],
         "win": {
-            "icon": "build/icon.ico",
             "target": "dir"
         }
     }
