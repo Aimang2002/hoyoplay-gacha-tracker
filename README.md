@@ -1,6 +1,6 @@
 # HoyoPlay Gacha Tracker / 米游抽卡统计
 
-绝区零（Zenless Zone Zero）与原神（Genshin Impact）抽卡记录统计与可视化桌面工具，基于 Electron + React 构建，数据完全本地存储。
+绝区零（Zenless Zone Zero）与原神（Genshin Impact）抽卡记录统计与可视化桌面工具，基于 Electron + React 构建，数据完全本地存储。该项目参考了[genshin-wish-export](https://github.com/biuuu/genshin-wish-export)和[zzz-signal-search-export](https://github.com/earthjasonlin/zzz-signal-search-export)获取authkey的方式。
 
 ## 功能特性
 
