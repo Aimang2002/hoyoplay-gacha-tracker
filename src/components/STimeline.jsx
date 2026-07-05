@@ -25,10 +25,15 @@ function getPityType(data, standardItems) {
   return null
 }
 
-export default function STimeline({ data, iconMap, rankFilter, pityCount, rankColors, pityMax = 90, standardItems = [], recordLabel = '祈愿记录', consecutiveLosses = 0, currentGame = 'zzz' }) {
+export default function STimeline({ data, iconMap, rankFilter, pityCount, rankPityCount, rankColors, pityMax = 90, standardItems = [], recordLabel = '祈愿记录', consecutiveLosses = 0, currentGame = 'zzz' }) {
   const config = rankColors || DEFAULT_RANK_CONFIG
+  const hasData = data && data.length > 0
+  const rankPityConfig = config[rankFilter] || { label: '4', fullLabel: '四星', color: '#8b5cf6' }
+  const isRankPityFilter = (currentGame === 'genshin' && rankFilter === 4) || (currentGame === 'zzz' && rankFilter === 3)
+  const showRankPityHint = isRankPityFilter && rankPityCount !== undefined && rankPityCount !== null
+  const rankPityRemaining = Math.max(0, 10 - Math.min(rankPityCount, 10))
 
-  if (!data || data.length === 0) {
+  if (!hasData && !showRankPityHint) {
     return (
       <div className="timeline-empty">
         <div>该频段暂无获取记录</div>
@@ -37,7 +42,7 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount, rankCo
   }
 
   const pityColor = getPityColor(pityCount || 0, pityMax)
-  const grouped = groupByDate(data)
+  const grouped = hasData ? groupByDate(data) : []
   const pityType = getPityType(data, standardItems)
   const isGenshinSmallPity = currentGame === 'genshin' && pityType === '小保底'
   const captureRadianceProb = isGenshinSmallPity ? getCaptureRadianceProb(consecutiveLosses) : 0
@@ -66,6 +71,24 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount, rankCo
                 </span>
               )}
               <span className="pity-value" style={{ color: pityColor }}>{pityCount}<span className="pity-max">/{pityMax}</span></span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRankPityHint && (
+        <div className="tl-item tl-pity-hint">
+          <div className="tl-time-col">
+            <div className="tl-time-label">{rankPityRemaining}</div>
+          </div>
+          <div className="tl-rail-col">
+            <div className="tl-dot" style={{ background: rankPityConfig.color, boxShadow: `0 0 6px 2px ${rankPityConfig.color}55` }} />
+          </div>
+          <div className="tl-card-col">
+            <div className="tl-card" style={{ '--rank-color': rankPityConfig.color }}>
+              <div className="tl-icon-fallback tl-question-icon">
+                ?
+              </div>
             </div>
           </div>
         </div>

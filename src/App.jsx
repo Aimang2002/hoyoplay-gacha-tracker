@@ -19,6 +19,7 @@ export default function App() {
   const [countData, setCountData] = useState({})
   const [iconMap, setIconMap] = useState({})
   const [pityData, setPityData] = useState({})
+  const [rankPityData, setRankPityData] = useState({})
   const [lossData, setLossData] = useState({})
 
   const [switchingUid, setSwitchingUid] = useState(null)
@@ -84,6 +85,18 @@ export default function App() {
     setPityData(newPity)
   }, [currentUid, currentGame, GACHA_POOLS])
 
+  const loadRankPity = useCallback(async (overrideUid, overrideRankFilter) => {
+    const uid = overrideUid || currentUid
+    const minRank = overrideRankFilter || rankFilter
+    if (!uid || !minRank) return
+    const newPity = {}
+    for (const pool of GACHA_POOLS) {
+      const pity = await window.electronAPI.getCurrentPity(uid, pool.type, minRank, currentGame)
+      newPity[pool.type] = pity
+    }
+    setRankPityData(newPity)
+  }, [currentUid, rankFilter, currentGame, GACHA_POOLS])
+
   const loadLosses = useCallback(async (overrideUid) => {
     const uid = overrideUid || currentUid
     if (!uid) return
@@ -115,6 +128,10 @@ export default function App() {
   useEffect(() => {
     if (currentUid && !switchingUid) loadPity()
   }, [currentUid, loadPity])
+
+  useEffect(() => {
+    if (currentUid && !switchingUid) loadRankPity()
+  }, [currentUid, rankFilter, loadRankPity])
 
   useEffect(() => {
     if (currentUid && !switchingUid) loadLosses()
@@ -153,6 +170,7 @@ export default function App() {
     await loadIconMap()
     await loadStats(syncUid || currentUid)
     await loadPity(syncUid || currentUid)
+    await loadRankPity(syncUid || currentUid)
     await loadLosses(syncUid || currentUid)
     setSwitchingUid(null)
   }
@@ -165,9 +183,11 @@ export default function App() {
     setTimelineData({})
     setCountData({})
     setPityData({})
+    setRankPityData({})
     setLossData({})
     await loadStats(uid)
     await loadPity(uid)
+    await loadRankPity(uid)
     await loadLosses(uid)
     setSwitchingUid(null)
   }
@@ -193,6 +213,7 @@ export default function App() {
     setTimelineData({})
     setCountData({})
     setPityData({})
+    setRankPityData({})
     setLossData({})
     setActivePool(GAME_CONFIG[newGame].pools[0].type)
     setRankFilter(GAME_CONFIG[newGame].rankFilters[0].value)
@@ -468,6 +489,7 @@ export default function App() {
             iconMap={iconMap}
             rankFilter={rankFilter}
             pityCount={pityData[activePool]}
+            rankPityCount={rankPityData[activePool]}
             rankColors={rankColors}
             pityMax={gameConfig.pityMax}
             standardItems={gameConfig.standardItems}
