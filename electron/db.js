@@ -53,6 +53,12 @@ const TABLE_INDEXES = {
 const GAMES_LIST = ['zzz', 'genshin']
 
 function tbl(game, base) {
+  if (!GAMES_LIST.includes(game)) {
+    throw new Error(`Invalid game: ${game}`)
+  }
+  if (!TABLE_SCHEMAS[base]) {
+    throw new Error(`Invalid table base: ${base}`)
+  }
   return `${game}_${base}`
 }
 
@@ -68,6 +74,12 @@ function tableExists(tableName) {
   return result.length > 0 && result[0].values.length > 0
 }
 
+function tableHasColumn(tableName, columnName) {
+  const result = db.exec(`PRAGMA table_info(${tableName})`)
+  if (result.length === 0) return false
+  return result[0].values.some(row => row[1] === columnName)
+}
+
 function migrateOldTables() {
   const oldTables = ['accounts', 'gacha_records', 'icons']
   const hasOld = oldTables.some(t => tableExists(t))
@@ -75,41 +87,59 @@ function migrateOldTables() {
 
   console.log('[DB] 检测到旧版统一表，开始迁移...')
 
-  for (const game of GAMES_LIST) {
+  try {
+    db.run('BEGIN TRANSACTION')
+
     for (const base of oldTables) {
-      const newTable = tbl(game, base)
-      if (tableExists(newTable)) continue
+      if (!tableExists(base)) continue
 
-      db.run(TABLE_SCHEMAS[base](newTable))
-      ;(TABLE_INDEXES[base](newTable) || []).forEach(idx => db.run(idx))
+      const hasGameColumn = tableHasColumn(base, 'game')
+      const targetGames = hasGameColumn ? GAMES_LIST : ['zzz']
 
-      if (tableExists(base)) {
-        try {
-          if (base === 'accounts') {
-            db.run(`INSERT OR IGNORE INTO ${newTable} (uid, authkey, region, game_biz, last_sync_time, created_at)
-              SELECT uid, authkey, region, game_biz, last_sync_time, created_at FROM ${base} WHERE game = ?`, [game])
-          } else if (base === 'gacha_records') {
-            db.run(`INSERT OR IGNORE INTO ${newTable} (id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time, created_at)
-              SELECT id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time, created_at FROM ${base} WHERE game = ?`, [game])
-          } else if (base === 'icons') {
-            db.run(`INSERT OR IGNORE INTO ${newTable} (alias_name, icon_url, item_type, updated_at)
-              SELECT alias_name, icon_url, item_type, updated_at FROM ${base} WHERE game = ?`, [game])
-          }
-        } catch (e) {
-          console.error(`[DB] 迁移 ${base} → ${newTable} 失败:`, e.message)
+      if (hasGameColumn) {
+        const unknownGames = queryOne(
+          `SELECT COUNT(*) as count FROM ${base} WHERE game IS NULL OR game NOT IN (?, ?)`,
+          GAMES_LIST
+        )
+        if (unknownGames && unknownGames.count > 0) {
+          throw new Error(`${base} contains unsupported game values`)
+        }
+      }
+
+      for (const game of targetGames) {
+        const newTable = tbl(game, base)
+        db.run(TABLE_SCHEMAS[base](newTable))
+        ;(TABLE_INDEXES[base](newTable) || []).forEach(idx => db.run(idx))
+
+        const filter = hasGameColumn ? ' WHERE game = ?' : ''
+        const params = hasGameColumn ? [game] : []
+
+        if (base === 'accounts') {
+          db.run(`INSERT OR IGNORE INTO ${newTable} (uid, authkey, region, game_biz, last_sync_time, created_at)
+            SELECT uid, authkey, region, game_biz, last_sync_time, created_at FROM ${base}${filter}`, params)
+        } else if (base === 'gacha_records') {
+          db.run(`INSERT OR IGNORE INTO ${newTable} (id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time, created_at)
+            SELECT id, uid, gacha_type, item_id, item_name, item_type, rank_type, gacha_time, created_at FROM ${base}${filter}`, params)
+        } else if (base === 'icons') {
+          db.run(`INSERT OR IGNORE INTO ${newTable} (alias_name, icon_url, item_type, updated_at)
+            SELECT alias_name, icon_url, item_type, updated_at FROM ${base}${filter}`, params)
         }
       }
     }
-  }
 
-  for (const t of oldTables) {
-    if (tableExists(t)) {
-      db.run(`DROP TABLE IF EXISTS ${t}`)
+    for (const t of oldTables) {
+      if (tableExists(t)) {
+        db.run(`DROP TABLE IF EXISTS ${t}`)
+      }
     }
-  }
 
-  saveDB()
-  console.log('[DB] 旧表迁移完成')
+    db.run('COMMIT')
+    saveDB()
+    console.log('[DB] 旧表迁移完成')
+  } catch (e) {
+    try { db.run('ROLLBACK') } catch (rollbackError) {}
+    console.error('[DB] 旧表迁移失败，已保留旧表:', e.message)
+  }
 }
 
 async function initDB() {
@@ -276,7 +306,7 @@ function getCurrentPity(uid, gachaType, minRank, game = 'zzz') {
   const lastHit = queryOne(
     `SELECT id FROM ${tbl(game, 'gacha_records')}
      WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
-     ORDER BY gacha_time DESC LIMIT 1`,
+     ORDER BY gacha_time DESC, id DESC LIMIT 1`,
     [uid, gachaType, minRank]
   )
   if (!lastHit) return allIds.length

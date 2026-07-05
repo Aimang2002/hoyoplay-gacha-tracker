@@ -15,6 +15,10 @@ let mainWindow
 const BASE_WIDTH = 1280
 const BASE_HEIGHT = 860
 
+function normalizeGame(game = 'zzz') {
+  return Object.prototype.hasOwnProperty.call(GAMES, game) ? game : 'zzz'
+}
+
 function updateZoom() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   const [w, h] = mainWindow.getSize()
@@ -36,7 +40,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,
+      webSecurity: true,
     },
   })
 
@@ -73,11 +77,13 @@ app.on('window-all-closed', () => {
 })
 
 ipcMain.handle('parse-log', async (event, game = 'zzz') => {
+  game = normalizeGame(game)
   const parser = getParser(game)
   return parser.parseLog()
 })
 
 ipcMain.handle('sync-data', async (event, game = 'zzz') => {
+  game = normalizeGame(game)
   console.log('[Main] sync-data: 开始同步, game:', game)
   try {
     await new Promise(r => setTimeout(r, 500))
@@ -158,6 +164,7 @@ ipcMain.handle('sync-data', async (event, game = 'zzz') => {
 })
 
 ipcMain.handle('sync-icons', async (event, game = 'zzz') => {
+  game = normalizeGame(game)
   try {
     const icons = await fetchWikiIcons(game)
     upsertIcons(icons, game)
@@ -168,16 +175,19 @@ ipcMain.handle('sync-icons', async (event, game = 'zzz') => {
 })
 
 ipcMain.handle('get-accounts', async (event, game = 'zzz') => {
+  game = normalizeGame(game)
   return getAccounts(game)
 })
 
 ipcMain.handle('get-gacha-stats', async (event, uid, gachaType, minRank, game = 'zzz') => {
+  game = normalizeGame(game)
   const stats = getGachaStats(uid, gachaType, minRank || 3, game)
   const iconMap = getIconMap(game)
   return stats.map(s => ({ ...s, icon: iconMap[s.item_name] || null }))
 })
 
 ipcMain.handle('get-timeline', async (event, uid, gachaType, minRank, game = 'zzz') => {
+  game = normalizeGame(game)
   const items = getTimeline(uid, gachaType, minRank || 4, game)
   const iconMap = getIconMap(game)
 
@@ -214,10 +224,12 @@ ipcMain.handle('get-timeline', async (event, uid, gachaType, minRank, game = 'zz
 })
 
 ipcMain.handle('get-icon-map', async (event, game = 'zzz') => {
+  game = normalizeGame(game)
   return getIconMap(game)
 })
 
 ipcMain.handle('get-gacha-count', async (event, uid, gachaType, game = 'zzz') => {
+  game = normalizeGame(game)
   const total = getGachaCountByType(uid, gachaType, game)
   // For Genshin: rank 5 = S, rank 4 = A, rank 3 = B
   // For ZZZ: rank 4 = S, rank 3 = A, rank 2 = B
@@ -231,10 +243,12 @@ ipcMain.handle('get-gacha-count', async (event, uid, gachaType, game = 'zzz') =>
 })
 
 ipcMain.handle('get-current-pity', async (event, uid, gachaType, minRank, game = 'zzz') => {
+  game = normalizeGame(game)
   return getCurrentPity(uid, gachaType, minRank || 4, game)
 })
 
 ipcMain.handle('get-consecutive-losses', async (event, uid, gachaType, game = 'zzz') => {
+  game = normalizeGame(game)
   const gameConfig = GAMES[game] || GAMES.genshin
   const topRank = Object.keys(gameConfig.rankConfig).map(Number).sort((a, b) => b - a)[0]
   const standardItems = gameConfig.standardItems || []

@@ -3,6 +3,7 @@ const zlib = require('zlib')
 const { GAMES, GAME_BIZ_PREFIXES } = require('./config')
 
 function getGameByBiz(gameBiz) {
+  if (!gameBiz) return null
   const prefix = Object.keys(GAME_BIZ_PREFIXES).find(p => gameBiz.startsWith(p))
   if (prefix) {
     return GAMES[GAME_BIZ_PREFIXES[prefix]]
