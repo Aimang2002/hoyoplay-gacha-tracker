@@ -18,6 +18,7 @@ data/
 # === 工具配置（本地） ===
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # === 个人/本地文件（不入库） ===
 计划书.md
