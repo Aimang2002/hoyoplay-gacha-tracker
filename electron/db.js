@@ -2,6 +2,7 @@ const initSqlJs = require('sql.js')
 const path = require('path')
 const fs = require('fs')
 const { app } = require('electron')
+const { GAMES } = require('./config')
 
 let db
 let dbPath
@@ -60,6 +61,17 @@ function tbl(game, base) {
     throw new Error(`Invalid table base: ${base}`)
   }
   return `${game}_${base}`
+}
+
+// 卡池类型聚合：config 中 typeGroups 定义的分组（如原神 301+400）展开为多个 gacha_type 一起查询
+function gachaTypesFor(game, gachaType) {
+  const gameConfig = GAMES[game] || {}
+  const group = gameConfig.typeGroups && gameConfig.typeGroups[String(gachaType)]
+  return group ? group.map(String) : [String(gachaType)]
+}
+
+function inPlaceholders(count) {
+  return `(${Array(count).fill('?').join(',')})`
 }
 
 function saveDB() {
@@ -237,37 +249,44 @@ function insertGachaRecords(records, game = 'zzz') {
 }
 
 function getExistingIds(uid, gachaType, game = 'zzz') {
-  const rows = queryAll(`SELECT id FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ?`, [uid, gachaType])
+  const types = gachaTypesFor(game, gachaType)
+  const rows = queryAll(
+    `SELECT id FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)}`,
+    [uid, ...types]
+  )
   return new Set(rows.map(r => r.id))
 }
 
 function getGachaStats(uid, gachaType, minRank = 3, game = 'zzz') {
+  const types = gachaTypesFor(game, gachaType)
   return queryAll(
     `SELECT item_name, rank_type, COUNT(*) as count
      FROM ${tbl(game, 'gacha_records')}
-     WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
+     WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)} AND rank_type >= ?
      GROUP BY item_name, rank_type
      ORDER BY rank_type DESC, count DESC`,
-    [uid, gachaType, minRank]
+    [uid, ...types, minRank]
   )
 }
 
 function getTimeline(uid, gachaType, minRank = 4, game = 'zzz') {
+  const types = gachaTypesFor(game, gachaType)
   return queryAll(
     `SELECT item_name, gacha_time, rank_type, gacha_type, id
      FROM ${tbl(game, 'gacha_records')}
-     WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
+     WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)} AND rank_type >= ?
      ORDER BY gacha_time ASC, id ASC`,
-    [uid, gachaType, minRank]
+    [uid, ...types, minRank]
   )
 }
 
 function getAllOrderedIds(uid, gachaType, game = 'zzz') {
+  const types = gachaTypesFor(game, gachaType)
   return queryAll(
     `SELECT id FROM ${tbl(game, 'gacha_records')}
-     WHERE uid = ? AND gacha_type = ?
+     WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)}
      ORDER BY gacha_time ASC, id ASC`,
-    [uid, gachaType]
+    [uid, ...types]
   )
 }
 
@@ -287,27 +306,67 @@ function updateSyncTime(uid, game = 'zzz') {
 }
 
 function getGachaCountByType(uid, gachaType, game = 'zzz') {
-  const row = queryOne(`SELECT COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ?`, [uid, gachaType])
+  const types = gachaTypesFor(game, gachaType)
+  const row = queryOne(
+    `SELECT COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)}`,
+    [uid, ...types]
+  )
   return row ? row.count : 0
 }
 
 function getGachaCountByRank(uid, gachaType, rankType, game = 'zzz') {
-  const row = queryOne(`SELECT COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ? AND rank_type = ?`, [uid, gachaType, rankType])
+  const types = gachaTypesFor(game, gachaType)
+  const row = queryOne(
+    `SELECT COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)} AND rank_type = ?`,
+    [uid, ...types, rankType]
+  )
   return row ? row.count : 0
 }
 
+// 数据驱动的卡池清单：按配置顺序返回该账号有记录的卡池（主类型聚合 typeGroups 成员），
+// 并附带配置外、未被分组吸收的类型，避免未来新卡池数据不可见
+function getPoolCounts(uid, game = 'zzz') {
+  const rows = queryAll(
+    `SELECT gacha_type, COUNT(*) as count FROM ${tbl(game, 'gacha_records')} WHERE uid = ? GROUP BY gacha_type`,
+    [uid]
+  )
+  const gameConfig = GAMES[game] || {}
+  const typeGroups = gameConfig.typeGroups || {}
+
+  const raw = {}
+  for (const row of rows) raw[String(row.gacha_type)] = row.count
+
+  const result = []
+  const merged = new Set()
+  for (const primary of Object.keys(gameConfig.pools || {})) {
+    const members = typeGroups[primary] || [primary]
+    let count = 0
+    for (const m of members) {
+      merged.add(String(m))
+      count += raw[String(m)] || 0
+    }
+    if (count > 0) result.push({ gacha_type: String(primary), count })
+  }
+  for (const t of Object.keys(raw)) {
+    if (!merged.has(t)) result.push({ gacha_type: t, count: raw[t] })
+  }
+  return result
+}
+
 function getCurrentPity(uid, gachaType, minRank, game = 'zzz') {
+  const types = gachaTypesFor(game, gachaType)
+  const inClause = inPlaceholders(types.length)
   const allIds = queryAll(
-    `SELECT id FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type = ? ORDER BY gacha_time ASC, id ASC`,
-    [uid, gachaType]
+    `SELECT id FROM ${tbl(game, 'gacha_records')} WHERE uid = ? AND gacha_type IN ${inClause} ORDER BY gacha_time ASC, id ASC`,
+    [uid, ...types]
   )
   if (allIds.length === 0) return 0
 
   const lastHit = queryOne(
     `SELECT id FROM ${tbl(game, 'gacha_records')}
-     WHERE uid = ? AND gacha_type = ? AND rank_type >= ?
+     WHERE uid = ? AND gacha_type IN ${inClause} AND rank_type >= ?
      ORDER BY gacha_time DESC, id DESC LIMIT 1`,
-    [uid, gachaType, minRank]
+    [uid, ...types, minRank]
   )
   if (!lastHit) return allIds.length
 
@@ -321,12 +380,13 @@ function getConsecutiveLosses(uid, gachaType, topRank, standardItems, game = 'zz
   if (game !== 'genshin') return 0
 
   const cutoffDate = '2024-08-28'
+  const types = gachaTypesFor(game, gachaType)
 
   const topRecords = queryAll(
     `SELECT item_name, gacha_time FROM ${tbl(game, 'gacha_records')}
-     WHERE uid = ? AND gacha_type = ? AND rank_type >= ? AND gacha_time > ?
+     WHERE uid = ? AND gacha_type IN ${inPlaceholders(types.length)} AND rank_type >= ? AND gacha_time > ?
      ORDER BY gacha_time ASC, id ASC`,
-    [uid, gachaType, topRank, cutoffDate]
+    [uid, ...types, topRank, cutoffDate]
   )
 
   if (topRecords.length === 0) return 0
@@ -361,6 +421,6 @@ function getConsecutiveLosses(uid, gachaType, topRank, standardItems, game = 'zz
 module.exports = {
   initDB, closeDB, getAccounts, upsertAccount, upsertIcons,
   insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap,
-  updateSyncTime, getGachaCountByType, getGachaCountByRank,
+  updateSyncTime, getGachaCountByType, getGachaCountByRank, getPoolCounts,
   getCurrentPity, getAllOrderedIds, getConsecutiveLosses
 }

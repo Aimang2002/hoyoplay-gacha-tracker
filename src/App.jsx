@@ -17,12 +17,30 @@ export default function App() {
   const [statsData, setStatsData] = useState({})
   const [timelineData, setTimelineData] = useState({})
   const [countData, setCountData] = useState({})
+  const [poolCountsList, setPoolCountsList] = useState([])
   const [iconMap, setIconMap] = useState({})
   const [pityData, setPityData] = useState({})
   const [rankPityData, setRankPityData] = useState({})
   const [lossData, setLossData] = useState({})
 
   const [switchingUid, setSwitchingUid] = useState(null)
+
+  // 网络时间偏移（主进程校时），失败为 0 退化为本地时间；用于卡池相位判定
+  const [serverTimeOffset, setServerTimeOffset] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await window.electronAPI.getServerTime()
+        if (!cancelled && res && typeof res.offset === 'number') {
+          setServerTimeOffset(res.offset)
+        }
+      } catch (e) {}
+    }
+    load()
+    const timer = setInterval(load, 30 * 60 * 1000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [])
 
   const gameConfig = GAME_CONFIG[currentGame]
   const GACHA_POOLS = gameConfig.pools
@@ -52,25 +70,30 @@ export default function App() {
   const loadStats = useCallback(async (overrideUid) => {
     const uid = overrideUid || currentUid
     if (!uid) return
+    // 卡池清单由数据驱动：只加载该账号有记录的卡池
+    const poolCounts = await window.electronAPI.getPoolCounts(uid, currentGame)
+    setPoolCountsList(poolCounts)
+
     const newStats = {}
     const newTimeline = {}
     const newCounts = {}
 
-    for (const pool of GACHA_POOLS) {
-      const stats = await window.electronAPI.getGachaStats(uid, pool.type, 3, currentGame)
-      newStats[pool.type] = stats
+    for (const pc of poolCounts) {
+      const type = pc.gacha_type
+      const stats = await window.electronAPI.getGachaStats(uid, type, 3, currentGame)
+      newStats[type] = stats
 
-      const timeline = await window.electronAPI.getTimeline(uid, pool.type, rankFilter, currentGame)
-      newTimeline[pool.type] = timeline
+      const timeline = await window.electronAPI.getTimeline(uid, type, rankFilter, currentGame)
+      newTimeline[type] = timeline
 
-      const counts = await window.electronAPI.getGachaCount(uid, pool.type, currentGame)
-      newCounts[pool.type] = counts
+      const counts = await window.electronAPI.getGachaCount(uid, type, currentGame)
+      newCounts[type] = counts
     }
 
     setStatsData(newStats)
     setTimelineData(newTimeline)
     setCountData(newCounts)
-  }, [currentUid, rankFilter, currentGame, GACHA_POOLS])
+  }, [currentUid, rankFilter, currentGame])
 
   const loadPity = useCallback(async (overrideUid) => {
     const uid = overrideUid || currentUid
@@ -182,6 +205,7 @@ export default function App() {
     setStatsData({})
     setTimelineData({})
     setCountData({})
+    setPoolCountsList([])
     setPityData({})
     setRankPityData({})
     setLossData({})
@@ -212,6 +236,7 @@ export default function App() {
     setStatsData({})
     setTimelineData({})
     setCountData({})
+    setPoolCountsList([])
     setPityData({})
     setRankPityData({})
     setLossData({})
@@ -265,6 +290,37 @@ export default function App() {
   }, [])
 
   const currentAccount = accounts.find(a => a.uid === currentUid)
+
+  // 当前卡池的保底判定规则（按池区分大小保底可判性、保底上限、是否显示捕获明光）；
+  // 原神附带卡池相位表，用于命定值轮换判定
+  const basePityRule = (gameConfig.pityRules || {})[activePool]
+    || { type: 'up', pityMax: gameConfig.pityMax, standardItems: [] }
+  const activePityRule = gameConfig.phaseSchedule
+    ? { ...basePityRule, phaseSchedule: gameConfig.phaseSchedule }
+    : basePityRule
+
+  // 展示卡池 = 有记录的卡池（顺序按配置数组，配置外类型排在最后并兜底命名）
+  const displayPools = [...poolCountsList]
+    .sort((a, b) => {
+      const ia = GACHA_POOLS.findIndex(p => p.type === a.gacha_type)
+      const ib = GACHA_POOLS.findIndex(p => p.type === b.gacha_type)
+      if (ia === -1 && ib === -1) return String(a.gacha_type).localeCompare(String(b.gacha_type))
+      if (ia === -1) return 1
+      if (ib === -1) return -1
+      return ia - ib
+    })
+    .map(pc => {
+      const known = GACHA_POOLS.find(p => p.type === pc.gacha_type)
+      return { type: pc.gacha_type, name: known ? known.name : `卡池 ${pc.gacha_type}` }
+    })
+
+  // 当前选中卡池无数据时，自动切到第一个有数据的卡池
+  useEffect(() => {
+    if (displayPools.length === 0) return
+    if (!displayPools.find(p => p.type === activePool)) {
+      setActivePool(displayPools[0].type)
+    }
+  }, [displayPools, activePool])
 
   const rankColors = gameConfig.rankConfig
 
@@ -420,13 +476,15 @@ export default function App() {
             data={timelineData[activePool] || []}
             iconMap={iconMap}
             pityCount={pityData[activePool]}
-            poolName={GACHA_POOLS.find(p => p.type === activePool)?.name || ''}
+            poolName={displayPools.find(p => p.type === activePool)?.name || ''}
             uid={currentUid}
             rankFilter={rankFilter}
             gameTitle={gameConfig.title}
             rankColors={rankColors}
             consecutiveLosses={lossData[activePool] || 0}
             currentGame={currentGame}
+            pityMax={activePityRule.pityMax}
+            showRadiance={!!activePityRule.radiance && currentGame === 'genshin'}
           />
           <button
             className={`sync-btn ${syncing ? 'syncing' : ''}`}
@@ -444,8 +502,8 @@ export default function App() {
       </div>
 
       <div className="content-area">
-        <div className="pie-grid" style={{ ...slideStyle, gridTemplateColumns: `repeat(${GACHA_POOLS.length}, 1fr)` }}>
-          {GACHA_POOLS.map(pool => {
+        <div className="pie-grid" style={{ ...slideStyle, gridTemplateColumns: `repeat(${Math.max(displayPools.length, 1)}, 1fr)` }}>
+          {displayPools.map(pool => {
             const poolCounts = countData[pool.type] || {}
             const counts = { total: poolCounts.total || 0 }
             for (const [rank, config] of Object.entries(rankColors)) {
@@ -470,7 +528,7 @@ export default function App() {
           <div className="section-header">
             <h2>{gameConfig.recordLabel}</h2>
             <span className="pool-label">
-              {GACHA_POOLS.find(p => p.type === activePool)?.name}
+              {displayPools.find(p => p.type === activePool)?.name}
             </span>
             <div className="section-filter">
               {RANK_FILTERS.map(f => (
@@ -491,11 +549,12 @@ export default function App() {
             pityCount={pityData[activePool]}
             rankPityCount={rankPityData[activePool]}
             rankColors={rankColors}
-            pityMax={gameConfig.pityMax}
-            standardItems={gameConfig.standardItems}
+            pityRule={activePityRule}
+            standardItems={activePityRule.standardItems || []}
             recordLabel={gameConfig.recordLabel}
             consecutiveLosses={lossData[activePool] || 0}
             currentGame={currentGame}
+            nowMs={Date.now() + serverTimeOffset}
           />
         </div>
       </div>

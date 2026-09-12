@@ -9,8 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTimeline: (uid, gachaType, minRank, game) => ipcRenderer.invoke('get-timeline', uid, gachaType, minRank, game),
   getIconMap: (game) => ipcRenderer.invoke('get-icon-map', game),
   getGachaCount: (uid, gachaType, game) => ipcRenderer.invoke('get-gacha-count', uid, gachaType, game),
+  getPoolCounts: (uid, game) => ipcRenderer.invoke('get-pool-counts', uid, game),
   getCurrentPity: (uid, gachaType, minRank, game) => ipcRenderer.invoke('get-current-pity', uid, gachaType, minRank, game),
   getConsecutiveLosses: (uid, gachaType, game) => ipcRenderer.invoke('get-consecutive-losses', uid, gachaType, game),
+  getServerTime: () => ipcRenderer.invoke('get-server-time'),
 
   onSyncProgress: (callback) => {
     const handler = (event, data) => callback(data)

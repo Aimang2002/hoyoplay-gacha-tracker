@@ -8,7 +8,7 @@ const DEFAULT_RANK_CONFIG = {
   2: { label: 'B', fullLabel: 'B级', color: '#94a3b8' },
 }
 
-export default function ShareExport({ data, iconMap, pityCount, poolName, uid, rankFilter, gameTitle = '绝区零 · 抽卡统计', rankColors, pityMax = 90, consecutiveLosses = 0, currentGame = 'zzz' }) {
+export default function ShareExport({ data, iconMap, pityCount, poolName, uid, rankFilter, gameTitle = '绝区零 · 抽卡统计', rankColors, pityMax = 90, consecutiveLosses = 0, currentGame = 'zzz', showRadiance = false }) {
   const exportRef = useRef(null)
   const config = rankColors || DEFAULT_RANK_CONFIG
 
@@ -37,7 +37,7 @@ export default function ShareExport({ data, iconMap, pityCount, poolName, uid, r
 
   const pityColor = getPityColor(pityCount || 0, pityMax)
   const itemsToShow = groupByDate(data || [])
-  const isGenshinSmallPity = currentGame === 'genshin' && consecutiveLosses > 0
+  const isGenshinSmallPity = currentGame === 'genshin' && showRadiance && consecutiveLosses > 0
   const captureRadianceProb = isGenshinSmallPity ? getCaptureRadianceProb(consecutiveLosses) : 0
 
   return (

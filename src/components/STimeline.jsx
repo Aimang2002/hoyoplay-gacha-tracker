@@ -1,5 +1,5 @@
 import React from 'react'
-import { formatTime, formatDate, getPityColor, groupByDate, getCaptureRadianceProb } from '../utils'
+import { formatTime, formatDate, getPityColor, groupByDate, getCaptureRadianceProb, parseServerTime, getGenshinPhaseIndex } from '../utils'
 
 const DEFAULT_RANK_CONFIG = {
   4: { label: 'S', fullLabel: 'S级', color: '#f59e0b' },
@@ -7,26 +7,55 @@ const DEFAULT_RANK_CONFIG = {
   2: { label: 'B', fullLabel: 'B级', color: '#94a3b8' },
 }
 
-function getPityType(data, standardItems) {
-  if (!data || data.length === 0 || !standardItems) return null
+// 有UP概念的池：按最新一次最高稀有度是否为"歪"（standardItems 名单）判定。
+// 武器池歪了之后命定值只在当期卡池有效，用卡池相位编号判断是否已随轮换清零
+function getPityType(data, standardItems, pityRule, topRankThreshold, nowMs) {
+  if (!data || data.length === 0 || !standardItems || standardItems.length === 0) return null
 
-  let topRank = 0
-  for (let i = 0; i < data.length; i++) {
-    if (data[i].rank_type > topRank) topRank = data[i].rank_type
-  }
-  if (!topRank) return null
+  const lastHit = data.find(item => item.rank_type >= topRankThreshold)
+  if (!lastHit) return '小保底'
+  if (!standardItems.includes(lastHit.item_name)) return '小保底'
 
-  for (let i = 0; i < data.length; i++) {
-    if (data[i].rank_type >= topRank) {
-      const isStandard = standardItems.includes(data[i].item_name)
-      return isStandard ? '大保底' : '小保底'
+  // 歪了；判断命定值是否还在当期有效
+  if (pityRule.phaseSchedule) {
+    const hitPhase = getGenshinPhaseIndex(parseServerTime(lastHit.gacha_time), pityRule.phaseSchedule)
+    const nowPhase = getGenshinPhaseIndex(nowMs, pityRule.phaseSchedule)
+    if (hitPhase !== null && nowPhase !== null) {
+      return hitPhase === nowPhase ? '大保底' : '小保底'
     }
   }
-  return null
+  // 无相位数据（早于锚点）时退化为按卡池周期天数估算
+  if (pityRule.guaranteeWindowDays) {
+    const age = nowMs - parseServerTime(lastHit.gacha_time)
+    if (age > pityRule.guaranteeWindowDays * 86400000) return '小保底'
+  }
+  return '大保底'
 }
 
-export default function STimeline({ data, iconMap, rankFilter, pityCount, rankPityCount, rankColors, pityMax = 90, standardItems = [], recordLabel = '祈愿记录', consecutiveLosses = 0, currentGame = 'zzz' }) {
+// 集录祈愿：定轨物品不在记录中，无法直接判定；仅能判断命定值是否已被轮换清零
+function getChronicledPityType(data, pityRule, topRankThreshold, nowMs) {
+  if (!data || data.length === 0) return null
+
+  const lastHit = data.find(item => item.rank_type >= topRankThreshold)
+  if (!lastHit) return '小保底'
+
+  const hitMs = parseServerTime(lastHit.gacha_time)
+  if (pityRule.phaseSchedule) {
+    const hitPhase = getGenshinPhaseIndex(hitMs, pityRule.phaseSchedule)
+    const nowPhase = getGenshinPhaseIndex(nowMs, pityRule.phaseSchedule)
+    if (hitPhase !== null && nowPhase !== null) {
+      // 同一期内：是否为定轨命中不可知，无法判定；跨期：命定值已清零
+      return hitPhase === nowPhase ? null : '小保底'
+    }
+  }
+  const age = nowMs - hitMs
+  if (age <= (pityRule.guaranteeWindowDays || 21) * 86400000) return null
+  return '小保底'
+}
+
+export default function STimeline({ data, iconMap, rankFilter, pityCount, rankPityCount, rankColors, pityRule, standardItems = [], recordLabel = '祈愿记录', consecutiveLosses = 0, currentGame = 'zzz', nowMs }) {
   const config = rankColors || DEFAULT_RANK_CONFIG
+  const pityMax = (pityRule && pityRule.pityMax) || 90
   const hasData = data && data.length > 0
   const rankPityConfig = config[rankFilter] || { label: '4', fullLabel: '四星', color: '#8b5cf6' }
   const isRankPityFilter = (currentGame === 'genshin' && rankFilter === 4) || (currentGame === 'zzz' && rankFilter === 3)
@@ -43,8 +72,14 @@ export default function STimeline({ data, iconMap, rankFilter, pityCount, rankPi
 
   const pityColor = getPityColor(pityCount || 0, pityMax)
   const grouped = hasData ? groupByDate(data) : []
-  const pityType = getPityType(data, standardItems)
-  const isGenshinSmallPity = currentGame === 'genshin' && pityType === '小保底'
+  const topRankThreshold = Math.max(...Object.keys(config).map(Number))
+  const effectiveNow = nowMs || Date.now()
+  const pityType = (() => {
+    if (!pityRule || pityRule.type === 'none') return null
+    if (pityRule.type === 'chronicled') return getChronicledPityType(data, pityRule, topRankThreshold, effectiveNow)
+    return getPityType(data, standardItems, pityRule, topRankThreshold, effectiveNow)
+  })()
+  const isGenshinSmallPity = currentGame === 'genshin' && pityType === '小保底' && pityRule && pityRule.radiance
   const captureRadianceProb = isGenshinSmallPity ? getCaptureRadianceProb(consecutiveLosses) : 0
 
   return (

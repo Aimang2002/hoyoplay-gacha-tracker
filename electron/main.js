@@ -5,12 +5,21 @@ if (app.isPackaged) {
   app.setPath('userData', path.join(path.dirname(process.execPath), 'data'))
   app.setPath('cache', path.join(path.dirname(process.execPath), 'data', 'cache'))
 }
-const { initDB, closeDB, getAccounts, upsertAccount, upsertIcons, insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap, updateSyncTime, getGachaCountByType, getGachaCountByRank, getCurrentPity, getAllOrderedIds, getConsecutiveLosses } = require('./db')
+const { initDB, closeDB, getAccounts, upsertAccount, upsertIcons, insertGachaRecords, getExistingIds, getGachaStats, getTimeline, getIconMap, updateSyncTime, getGachaCountByType, getGachaCountByRank, getPoolCounts, getCurrentPity, getAllOrderedIds, getConsecutiveLosses } = require('./db')
 const { getParser } = require('./parsers')
-const { fetchAllGachaRecords, fetchWikiIcons, fetchUidFromApi } = require('./api')
+const { fetchAllGachaRecords, fetchWikiIcons, fetchUidFromApi, fetchServerTimeOffset } = require('./api')
 const { GAMES } = require('./config')
 
 let mainWindow
+
+// 网络时间偏移（网络时间 - 本地时间），供渲染端做卡池相位判定；获取失败保持 0（本地时间）
+let serverTimeOffset = 0
+async function refreshServerTime() {
+  const offset = await fetchServerTimeOffset()
+  if (typeof offset === 'number' && !Number.isNaN(offset)) {
+    serverTimeOffset = offset
+  }
+}
 
 const BASE_WIDTH = 1280
 const BASE_HEIGHT = 860
@@ -65,6 +74,8 @@ function createWindow() {
 app.whenReady().then(async () => {
   await initDB()
   createWindow()
+  refreshServerTime()
+  setInterval(refreshServerTime, 30 * 60 * 1000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -242,6 +253,11 @@ ipcMain.handle('get-gacha-count', async (event, uid, gachaType, game = 'zzz') =>
   return counts
 })
 
+ipcMain.handle('get-pool-counts', async (event, uid, game = 'zzz') => {
+  game = normalizeGame(game)
+  return getPoolCounts(uid, game)
+})
+
 ipcMain.handle('get-current-pity', async (event, uid, gachaType, minRank, game = 'zzz') => {
   game = normalizeGame(game)
   return getCurrentPity(uid, gachaType, minRank || 4, game)
@@ -255,6 +271,8 @@ ipcMain.handle('get-consecutive-losses', async (event, uid, gachaType, game = 'z
   if (!standardItems || standardItems.length === 0) return 0
   return getConsecutiveLosses(uid, gachaType, topRank, standardItems, game)
 })
+
+ipcMain.handle('get-server-time', () => ({ offset: serverTimeOffset }))
 
 ipcMain.handle('window-minimize', () => mainWindow.minimize())
 ipcMain.handle('window-maximize', () => {

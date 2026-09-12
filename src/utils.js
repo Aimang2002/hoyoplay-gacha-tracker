@@ -56,4 +56,24 @@ function getCaptureRadianceProb(consecutiveLosses) {
   return 100
 }
 
-export { RANK_COLORS, RANK_LABELS, formatTime, formatDate, getDateKey, getPityColor, groupByDate, getCaptureRadianceProb }
+// 服务器时间字符串('YYYY-MM-DD HH:mm:ss'，UTC+8) → 时间戳
+function parseServerTime(str) {
+  if (!str) return NaN
+  return Date.parse(String(str).replace(' ', 'T') + '+08:00')
+}
+
+// 原神卡池相位编号：同一编号即同一期卡池（42天一版本，上半场/下半场交替）。
+// 返回 null 表示时间早于锚点或配置缺失，调用方需退化为按天数估算
+function getGenshinPhaseIndex(timeMs, schedule) {
+  if (!timeMs || Number.isNaN(timeMs) || !schedule || !schedule.anchor) return null
+  const anchorMs = Date.parse(schedule.anchor)
+  if (Number.isNaN(anchorMs)) return null
+  const versionMs = (schedule.versionDays || 42) * 86400000
+  const offsetMs = (schedule.phaseTwoOffsetHours || 487) * 3600000
+  const k = Math.floor((timeMs - anchorMs) / versionMs)
+  if (k < 0) return null
+  const inCycle = timeMs - (anchorMs + k * versionMs)
+  return inCycle < offsetMs ? k * 2 : k * 2 + 1
+}
+
+export { RANK_COLORS, RANK_LABELS, formatTime, formatDate, getDateKey, getPityColor, groupByDate, getCaptureRadianceProb, parseServerTime, getGenshinPhaseIndex }

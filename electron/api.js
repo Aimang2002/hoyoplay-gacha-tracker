@@ -82,7 +82,7 @@ function buildGachaApiUrl(rawUrl, gachaType, page, size, endId) {
   return `${baseUrl}?${parsed.searchParams.toString()}`
 }
 
-async function fetchGachaPage(authParams, gachaType, page = 1, size = 20, endId = '0') {
+async function fetchGachaPage(authParams, gachaType, page = 1, size = 20, endId = '0', attempt = 0) {
   const url = buildGachaApiUrl(authParams.url, gachaType, page, size, endId)
   console.log('[API] fetchGachaPage: gachaType:', gachaType, 'page:', page)
 
@@ -96,6 +96,12 @@ async function fetchGachaPage(authParams, gachaType, page = 1, size = 20, endId 
 
   console.log('[API] fetchGachaPage: retcode:', result.retcode, 'message:', result.message)
 
+  if (result.retcode === -110 && attempt < 4) {
+    const wait = 15000 * (attempt + 1)
+    console.log('[API] fetchGachaPage: 触发限流,', wait / 1000, '秒后重试', `(${attempt + 1}/4)`)
+    await new Promise(r => setTimeout(r, wait))
+    return fetchGachaPage(authParams, gachaType, page, size, endId, attempt + 1)
+  }
   if (result.retcode === -111) {
     throw new Error('authkey已过期，请重新在游戏内打开抽卡历史页面')
   }
@@ -227,4 +233,37 @@ async function fetchUidFromApi(authParams) {
   return null
 }
 
-module.exports = { fetchGachaPage, fetchAllGachaRecords, fetchWikiIcons, fetchUidFromApi }
+// 网络校时：读取 HTTP Date 响应头（秒级精度），返回 (网络时间 - 本地时间) 偏移毫秒数。
+// 用于卡池相位判定，避免本地时钟不准导致跨期误判；全部失败返回 null（调用方退化为本地时间）
+async function fetchServerTimeOffset() {
+  const targets = [
+    'https://api.mihoyo.com/',
+    'https://public-operation-nap.mihoyo.com/',
+    'https://www.baidu.com/',
+  ]
+  for (const url of targets) {
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 5000)
+      const res = await fetch(url, {
+        method: 'HEAD',
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        signal: controller.signal,
+      })
+      clearTimeout(timer)
+      const dateHeader = res.headers.get('date')
+      if (!dateHeader) continue
+      const serverMs = Date.parse(dateHeader)
+      if (Number.isNaN(serverMs)) continue
+      const offset = serverMs - Date.now()
+      console.log('[API] fetchServerTimeOffset:', url, '偏移', offset, 'ms')
+      return offset
+    } catch (e) {
+      // 尝试下一个源
+    }
+  }
+  console.log('[API] fetchServerTimeOffset: 所有源均失败，使用本地时间')
+  return null
+}
+
+module.exports = { fetchGachaPage, fetchAllGachaRecords, fetchWikiIcons, fetchUidFromApi, fetchServerTimeOffset }
