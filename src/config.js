@@ -31,7 +31,6 @@ export const GAME_CONFIG = {
       { type: '301', name: '角色活动祈愿' },
       { type: '302', name: '武器活动祈愿' },
       { type: '200', name: '常驻祈愿' },
-      { type: '500', name: '集录祈愿' },
     ],
     rankFilters: [
       { value: 5, label: '仅5星' },

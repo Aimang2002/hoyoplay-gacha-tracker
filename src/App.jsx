@@ -444,7 +444,7 @@ export default function App() {
       </div>
 
       <div className="content-area">
-        <div className="pie-grid" style={slideStyle}>
+        <div className="pie-grid" style={{ ...slideStyle, gridTemplateColumns: `repeat(${GACHA_POOLS.length}, 1fr)` }}>
           {GACHA_POOLS.map(pool => {
             const poolCounts = countData[pool.type] || {}
             const counts = { total: poolCounts.total || 0 }
